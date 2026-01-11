@@ -156,7 +156,6 @@ def display_search_llm_response(llm_response):
         # ユーザー入力値と最も関連性が高いメインドキュメントのありかを表示
         # ==========================================
         # LLMからのレスポンス（辞書）の「context」属性の中の「0」に、最も関連性が高いドキュメント情報が入っている
-        print(llm_response["context"][0].metadata)
         main_file_path = llm_response["context"][0].metadata["source"]
 
         # 補足メッセージの表示

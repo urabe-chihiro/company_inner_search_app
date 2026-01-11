@@ -13,11 +13,11 @@ import sys
 import unicodedata
 from dotenv import load_dotenv
 import streamlit as st
-from docx import Document
 from langchain_community.document_loaders import WebBaseLoader
 from langchain_text_splitters import CharacterTextSplitter
 from langchain_openai import OpenAIEmbeddings
 from langchain_community.vectorstores import Chroma
+from langchain_core.documents import Document
 import constants as ct
 
 
@@ -211,16 +211,63 @@ def file_load(path, docs_all):
     """
     # ファイルの拡張子を取得
     file_extension = os.path.splitext(path)[1]
-    # ファイル名（拡張子を含む）を取得
-    file_name = os.path.basename(path)
 
     # 想定していたファイル形式の場合のみ読み込む
     if file_extension in ct.SUPPORTED_EXTENSIONS:
         # ファイルの拡張子に合ったdata loaderを使ってデータ読み込み
         loader = ct.SUPPORTED_EXTENSIONS[file_extension](path)
         docs = loader.load()
-        docs_all.extend(docs)
 
+        # CSVファイルの場合、行ごとに読み込んだドキュメントを統合
+        if file_extension == ".csv":
+            csv_doc = consolidate_csv_documents(docs)
+            docs_all.extend(csv_doc)
+        else:
+          docs_all.extend(docs)
+        
+
+def consolidate_csv_documents(docs):
+    """
+    CSVファイルから読み込んだドキュメントを統合（全行を1つのドキュメントにまとめる）
+
+    Args:
+        docs: CSVファイルから読み込んだドキュメントのリスト
+
+    Returns:
+        統合後のドキュメントリスト（通常は1つのドキュメントを含む）
+    """
+    if not docs:
+        return []
+    
+    header = (
+        "以下は社内CSVデータを統合したドキュメントです。\n"
+        "部署、日付、内容などの業務情報が含まれています。\n"
+    )
+
+    rows = []
+    for i, doc in enumerate(docs, start=1):
+        row_text = doc.page_content.replace("\n", " ").strip()
+        rows.append(
+            f"【CSV行 {i}】\n"
+            f"この行の内容は次の通りです。\n"
+            f"{row_text}\n"
+        )
+    
+    # 各ドキュメントを行として結合
+    consolidated_content = header + "\n".join(rows)
+    
+    # メタデータは最初のドキュメントから取得
+    metadata = {
+        "source": docs[0].metadata.get("source"),
+        "total_rows": len(docs),
+        "consolidated": True,
+        "data_type": "csv"
+    }
+    
+    # 全行を1つのドキュメントに統合
+    consolidated_docs = [Document(page_content=consolidated_content, metadata=metadata)]
+    
+    return consolidated_docs
 
 def adjust_string(s):
     """
