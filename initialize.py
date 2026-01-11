@@ -137,7 +137,7 @@ def initialize_retriever():
     # ベクターストアを検索するRetrieverの作成
     # 問題1: ベクターストアから取り出してプロンプトに埋め込む関連ドキュメントの数が「3」となっています。
     # 問題2: マジックナンバーを変数化これを「5」に変更
-    st.session_state.retriever = db.as_retriever(search_kwargs={"k": ct.RETRIEVER_TOP_K})
+    st.session_state.retriever = db.as_retriever(search_type="similarity", search_kwargs={"k": ct.RETRIEVER_TOP_K})
 
 
 def initialize_session_state():
@@ -211,6 +211,8 @@ def file_load(path, docs_all):
     """
     # ファイルの拡張子を取得
     file_extension = os.path.splitext(path)[1]
+    # ファイル名
+    file_name = os.path.basename(path)
 
     # 想定していたファイル形式の場合のみ読み込む
     if file_extension in ct.SUPPORTED_EXTENSIONS:
@@ -219,55 +221,77 @@ def file_load(path, docs_all):
         docs = loader.load()
 
         # CSVファイルの場合、行ごとに読み込んだドキュメントを統合
-        if file_extension == ".csv":
+        if file_name == "社員名簿.csv":
             csv_doc = consolidate_csv_documents(docs)
             docs_all.extend(csv_doc)
         else:
           docs_all.extend(docs)
-        
-
+    
 def consolidate_csv_documents(docs):
     """
-    CSVファイルから読み込んだドキュメントを統合（全行を1つのドキュメントにまとめる）
-
-    Args:
-        docs: CSVファイルから読み込んだドキュメントのリスト
-
-    Returns:
-        統合後のドキュメントリスト（通常は1つのドキュメントを含む）
+    CSVファイルから読み込んだドキュメントを統合し、
+    検索・一覧化に強い構造化テキストに変換する
     """
+
     if not docs:
         return []
     
-    header = (
-        "以下は社内CSVデータを統合したドキュメントです。\n"
-        "部署、日付、内容などの業務情報が含まれています。\n"
-    )
+    formatted_rows = []
 
-    rows = []
     for i, doc in enumerate(docs, start=1):
-        row_text = doc.page_content.replace("\n", " ").strip()
-        rows.append(
-            f"【CSV行 {i}】\n"
-            f"この行の内容は次の通りです。\n"
-            f"{row_text}\n"
-        )
+        # CSVの1行を「キー: 値」構造として扱う想定
+        # "id,氏名,部署,役職"
+        row_text = doc.page_content.replace("\n", "").strip()
+        formatted_rows.append(row_text)
     
-    # 各ドキュメントを行として結合
-    consolidated_content = header + "\n".join(rows)
+    rows_content = "\n".join(formatted_rows)
     
-    # メタデータは最初のドキュメントから取得
+    consolidated_content = f"""【従業員一覧データ】
+このドキュメントには複数部署の従業員情報が含まれています。
+人事部には複数名の従業員が所属しています。
+
+{rows_content}"""
+
     metadata = {
         "source": docs[0].metadata.get("source"),
         "total_rows": len(docs),
         "consolidated": True,
-        "data_type": "csv"
+        "doc_type": "employee_list"
     }
+
+    return [Document(page_content=consolidated_content, metadata=metadata)]
+
+
+# def consolidate_csv_documents(docs):
+#     """
+#     CSVファイルから読み込んだドキュメントを統合（全行を1つのドキュメントにまとめる）
+
+#     Args:
+#         docs: CSVファイルから読み込んだドキュメントのリスト
+
+#     Returns:
+#         統合後のドキュメントリスト（通常は1つのドキュメントを含む）
+#     """
+#     if not docs:
+#         return []
     
-    # 全行を1つのドキュメントに統合
-    consolidated_docs = [Document(page_content=consolidated_content, metadata=metadata)]
+#     # 全行のテキスト前処理：\nを適切に処理して可読性を上げる
+#     # 各ドキュメントを行として結合
+#     consolidated_content = "\n".join([
+#         doc.page_content.replace("\n", " | ") for doc in docs
+#     ])
     
-    return consolidated_docs
+#     # メタデータは最初のドキュメントから取得
+#     metadata = {
+#         "source": docs[0].metadata.get("source"),
+#         "total_rows": len(docs),
+#         "consolidated": True
+#     }
+    
+#     # 全行を1つのドキュメントに統合
+#     consolidated_docs = [Document(page_content=consolidated_content, metadata=metadata)]
+    
+#     return consolidated_docs
 
 def adjust_string(s):
     """
